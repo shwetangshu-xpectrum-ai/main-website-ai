@@ -1,5 +1,5 @@
+import gsap from 'gsap';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { motion, useInView, AnimatePresence } from 'framer-motion';
 import { Bot, Briefcase, BedDouble, Computer, FileText, ShieldCheck, Users, Lightbulb, Database, Target, RefreshCw, Clock, Shield } from 'lucide-react'; // Added Shield
 import Navbar from '../components/Navbar'; // Corrected import path
 
@@ -103,7 +103,6 @@ type IconType = React.ElementType;
 interface WorkflowBlockProps {
   title: string;
   icon?: IconType;
-  delay: number;
   color?: 'primary' | 'dark' | 'inactive';
   className?: string;
   IconComponent?: React.ReactNode;
@@ -112,13 +111,11 @@ interface WorkflowBlockProps {
   is3D?: boolean;
   id?: string;
   variant?: WorkflowStepVariant;
-  isAnimating?: boolean;
 }
 
 const WorkflowBlock: React.FC<WorkflowBlockProps> = ({
   title,
   icon: Icon = Bot,
-  delay,
   color = 'dark',
   className = '',
   IconComponent,
@@ -127,25 +124,22 @@ const WorkflowBlock: React.FC<WorkflowBlockProps> = ({
   is3D = true,
   id,
   variant,
-  isAnimating,
 }) => {
   const DisplayIcon = IconComponent || <Icon size={22} className="text-gray-900" />;
 
   const getBgColor = () => {
     if (color === 'primary' || isSelected) return 'bg-xpectrum-purple';
-    if (isAnimating) return 'bg-xpectrum-purple/90'; // Highlight animating blocks
     if (color === 'dark') return 'bg-gray-100';
     return 'bg-gray-100';
   };
 
   const getTextColor = () => {
-    if (color === 'primary' || isSelected || isAnimating) return 'text-white';
+    if (color === 'primary' || isSelected) return 'text-white';
     return 'text-gray-700';
   };
 
   const getShadowStyle = () => {
     if (!is3D) return '';
-    if (isAnimating) return 'shadow-xl shadow-xpectrum-purple/60 translate-y-[-3px]'; // Increased shadow intensity
     if (color === 'primary' || isSelected)
       return 'shadow-lg shadow-xpectrum-purple/25';
     return 'shadow-md shadow-gray-300/60';
@@ -153,7 +147,7 @@ const WorkflowBlock: React.FC<WorkflowBlockProps> = ({
 
   const get3DStyle = () => {
     if (!is3D) return '';
-    if (color === 'primary' || isSelected || isAnimating)
+    if (color === 'primary' || isSelected)
       return 'border-b-3 border-r-3 border-xpectrum-darkpurple';
     return 'border-b-2 border-r-2 border-gray-300';
   };
@@ -188,70 +182,82 @@ const WorkflowBlock: React.FC<WorkflowBlockProps> = ({
 
   const cursorStyle = onClick ? 'cursor-pointer' : '';
 
-  const hoverAnimation = onClick ? {
-    scale: 1.06,
-    y: -4,
-    rotateX: 5,
-    rotateY: -3,
-    boxShadow: isAnimating
-      ? '0px 12px 24px rgba(123, 104, 238, 0.55)' // Increased shadow
-      : (color === 'primary' || isSelected)
-        ? '0px 8px 16px rgba(123, 104, 238, 0.3)'
-        : '0px 6px 12px rgba(150, 150, 150, 0.4)'
-  } : {};
-
-  const animateState = isAnimating ? {
-    scale: 1.05, // Increased scale
-    y: -3, // More pronounced lift
-    boxShadow: ['0px 6px 15px rgba(123, 104, 238, 0.3)', '0px 10px 25px rgba(123, 104, 238, 0.6)', '0px 6px 15px rgba(123, 104, 238, 0.3)'],
-    transition: {
-      boxShadow: {
-        repeat: Infinity,
-        duration: 2, // Pulse slower
-      }
-    }
-  } : {};
-
   return (
-    <motion.div
+    <div
       id={id}
-      className={`relative p-3 rounded-lg ${getBgColor()} ${getTextColor()} ${cursorStyle} ${getShadowStyle()} ${get3DStyle()} ${getVariantStyle()} ${className} transition-all duration-300 flex flex-col justify-between text-center w-[100px] h-[100px] items-center`}
+      className={`relative p-3 rounded-lg ${getBgColor()} ${getTextColor()} ${cursorStyle} ${getShadowStyle()} ${get3DStyle()} ${getVariantStyle()} ${className} transition-colors duration-300 flex flex-col justify-between text-center w-[100px] h-[100px] items-center opacity-0 scale-90`}
       style={{ transformStyle: 'preserve-3d' }}
       onClick={onClick}
-      whileHover={hoverAnimation}
-      animate={animateState}
-      transition={{ duration: 0.3, type: "spring", stiffness: 300, damping: 20 }}
     >
       <div className={`w-10 h-10 ${getIconBgColor()} rounded-lg flex items-center justify-center mx-auto mb-2 ${getTextColor() === 'text-white' ? 'text-gray-700' : 'text-gray-900'}`}>
         {DisplayIcon}
       </div>
       <span className="font-medium text-[14px] text-center leading-tight">{title}</span>
-    </motion.div>
+    </div>
   );
 };
 
 
 interface ChatExampleProps {
-  delay: number;
   userMessage: string;
   botMessage: string;
   serviceColor?: string;
   id?: string;
+  showBotResponse?: boolean;
 }
 
-const ChatExample: React.FC<ChatExampleProps> = ({ delay, userMessage, botMessage, serviceColor = 'bg-xpectrum-purple', id }) => {
+const ChatExample: React.FC<ChatExampleProps> = ({ 
+  userMessage, 
+  botMessage, 
+  serviceColor = 'bg-xpectrum-purple', 
+  id, 
+  showBotResponse = true
+}) => {
   const isDynamicColor = serviceColor && !serviceColor.startsWith('bg-');
   const dynamicBgStyle = isDynamicColor ? { backgroundColor: serviceColor } : {};
   const staticBgClass = !isDynamicColor ? serviceColor : 'bg-xpectrum-purple';
 
+  const [displayedBotMessage, setDisplayedBotMessage] = useState('');
+  const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Clear any existing interval when props change
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current);
+      typingIntervalRef.current = null;
+    }
+
+    if (showBotResponse) {
+      setDisplayedBotMessage(''); // Reset message when starting to show
+      let index = 0;
+      typingIntervalRef.current = setInterval(() => {
+        setDisplayedBotMessage((prev) => prev + botMessage.charAt(index));
+        index++;
+        if (index >= botMessage.length) {
+          if (typingIntervalRef.current) {
+            clearInterval(typingIntervalRef.current);
+            typingIntervalRef.current = null;
+          }
+        }
+      }, 50); // Adjust typing speed (milliseconds per character)
+    } else {
+      setDisplayedBotMessage(''); // Clear message if not shown
+    }
+
+    // Cleanup function to clear interval on unmount or prop change
+    return () => {
+      if (typingIntervalRef.current) {
+        clearInterval(typingIntervalRef.current);
+        typingIntervalRef.current = null;
+      }
+    };
+  }, [botMessage, showBotResponse]); // Rerun effect if botMessage or showBotResponse changes
+
   return (
-  <motion.div
+  <div
     id={id}
-    className="bg-white rounded-xl shadow-sm p-4 w-72 h-auto border border-gray-100 min-h-[220px] flex flex-col"
-    initial={{ opacity: 0, x: 15 }}
-    whileInView={{ opacity: 1, x: 0 }}
-    viewport={{ once: true }}
-    transition={{ duration: 0.3, delay: delay }}
+    className="bg-white rounded-xl shadow-sm p-4 w-72 border border-gray-100 flex flex-col opacity-0 scale-90"
+    style={{ height: '260px' }}
   >
     <div className="flex justify-between items-center mb-3 border-b border-gray-100 pb-2">
       <div className="flex items-center">
@@ -270,189 +276,74 @@ const ChatExample: React.FC<ChatExampleProps> = ({ delay, userMessage, botMessag
       </div>
     </div>
 
-    <div className="space-y-3 flex-grow">
+    <div className="space-y-3 flex-grow overflow-y-auto">
       <div className="flex justify-end mb-2">
         <div className="bg-gray-100 rounded-t-lg rounded-bl-lg px-3 py-2 max-w-[85%]">
           <p className="text-[14px] text-gray-700">{userMessage}</p>
         </div>
       </div>
 
-      <div className="flex justify-start items-start">
-        <div
-           className={`w-6 h-6 rounded-full ${staticBgClass} flex items-center justify-center mr-2`}
-           style={dynamicBgStyle}
-         >
-          <Bot size={14} className="text-white" />
-        </div>
-        <div
-           className={`${staticBgClass} rounded-t-lg rounded-br-lg px-3 py-2 max-w-[85%]`}
-           style={dynamicBgStyle}
-         >
-          <p className="text-[14px] text-white">{botMessage}</p>
-        </div>
-      </div>
-    </div>
-
-    <div className="mt-3 bg-white rounded-lg p-2 h-28 border border-gray-100">
-      <div className="text-[14px] font-medium text-gray-700 mb-2">Dashboard</div>
-      <div className="grid grid-cols-2 gap-2 h-[calc(100%-24px)]">
-        <div className="bg-gray-50 rounded p-1 flex items-center justify-center">
-          <div className="w-full h-full relative">
-            <div className="absolute inset-0">
-              <div className={`${staticBgClass} h-full w-3/4 rounded-sm`} style={dynamicBgStyle}></div>
-            </div>
+      {showBotResponse && (
+        <div className="flex justify-start items-start">
+          <div
+             className={`w-6 h-6 rounded-full ${staticBgClass} flex items-center justify-center mr-2`}
+             style={dynamicBgStyle}
+           >
+            <Bot size={14} className="text-white" />
+          </div>
+          <div
+             className={`${staticBgClass} rounded-t-lg rounded-br-lg px-3 py-2 max-w-[85%]`}
+             style={dynamicBgStyle}
+           >
+            <p className="text-[14px] text-white">{displayedBotMessage}</p>
           </div>
         </div>
-        <div className="bg-gray-50 rounded p-1">
-          <div className={`${staticBgClass} h-2 rounded-sm w-full mb-1`} style={dynamicBgStyle}></div>
-          <div className="h-2 bg-xpectrum-magenta/70 rounded-sm w-2/3 mb-1"></div>
-          <div className="h-2 bg-xpectrum-blue/70 rounded-sm w-1/2"></div>
-        </div>
-        <div className="col-span-2 bg-gray-50 rounded p-1 flex items-end space-x-0.5">
-          <div className={`${staticBgClass} h-3/5 w-full rounded-sm`} style={dynamicBgStyle}></div>
-          <div className="bg-xpectrum-magenta/70 h-4/5 w-full rounded-sm"></div>
-          <div className="bg-xpectrum-blue/70 h-2/5 w-full rounded-sm"></div>
-          <div className={`${staticBgClass} h-3/5 w-full rounded-sm`} style={dynamicBgStyle}></div>
-          <div className="bg-xpectrum-blue/70 h-2/5 w-full rounded-sm"></div>
-          <div className="bg-xpectrum-magenta/70 h-4/5 w-full rounded-sm"></div>
-        </div>
-      </div>
+      )}
     </div>
-  </motion.div>
+  </div>
 )};
 
 
 interface ConnectionProps {
   from: string;
   to: string;
-  delay: number;
   path?: string;
-  isActive?: boolean;
   serviceColor?: string;
 }
 
-const Connection: React.FC<ConnectionProps> = ({ from, to, delay, path, isActive = false, serviceColor = '#7b68ee' }) => {
-  const connectionDrawDuration = 1.2; // Increased from 0.8
-  const particleAnimationDelay = 0.1; // Reduced from 0.2
+const Connection: React.FC<ConnectionProps> = ({ from, to, path, serviceColor = '#7b68ee' }) => {
+  const safePath = path || 'M0,0 L0,0';
+  const pathId = `path-${from}-${to}`;
 
-  // Add simple default path if none provided
-  const safePath = path || 'M0,0 L100,100';
+  if (!path || path === 'M NaN,NaN C NaN,NaN NaN,NaN NaN,NaN') {
+      return null;
+  }
 
   return (
-    <motion.div
-      className="absolute pointer-events-none z-10"
-      style={{
-        left: 0,
-        top: 0,
-        right: 0,
-        bottom: 0
-      }}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.3 }}
-    >
-      <svg className="absolute w-full h-full" style={{ overflow: 'visible' }}>
-        <defs>
-          <linearGradient id={`gradient-${from}-${to}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor={isActive ? serviceColor : "#d1d5db"} />
-            <stop offset="100%" stopColor={isActive ? serviceColor : "#d1d5db"} />
-          </linearGradient>
-
-          <filter id={`glow-${from}-${to}`} x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="6" result="blur" /> {/* Increased from 4 */}
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
-          
-          {/* Add marker for animated path */}
-          <marker 
-            id={`arrow-${from}-${to}`} 
-            viewBox="0 0 10 10" 
-            refX="5" 
-            refY="5" 
-            markerWidth="6" 
-            markerHeight="6" 
-            orient="auto-start-reverse"
-          >
-            <circle cx="5" cy="5" r="4" fill={serviceColor} />
-          </marker>
-        </defs>
-
-        {/* Background path */}
-        <path
-          d={safePath}
-          stroke="#e5e7eb"
-          strokeWidth="6" /* Increased from 5 */
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* Animated path */}
-        <motion.path
-          d={safePath}
-          stroke={isActive ? `url(#gradient-${from}-${to})` : "#d1d5db"}
-          strokeWidth="3.5" /* Increased from 2.5 */
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          filter={isActive ? `url(#glow-${from}-${to})` : ""}
-          initial={{ pathLength: 0 }}
-          animate={{ pathLength: isActive ? 1 : 0 }}
-          transition={{ duration: connectionDrawDuration, ease: "easeInOut", delay: isActive ? delay : 0 }}
-          style={{ transition: "stroke 0.3s ease" }}
-        />
-
-        {/* Animated particles on the path - only if active and path is valid */}
-        {isActive && safePath && (
-          <>
-            <motion.circle 
-              r="8" /* Increased from 6 */
-              fill={`${serviceColor}60`} /* Increased opacity from 40 to 60 */
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: delay + particleAnimationDelay, duration: 0.3 }}
-            >
-              <animateMotion
-                dur="1.5s"
-                repeatCount="indefinite"
-                path={safePath}
-              />
-            </motion.circle>
-
-            <motion.circle 
-              r="4" /* Increased from 3 */
-              fill={serviceColor}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: delay + particleAnimationDelay + 0.1, duration: 0.3 }}
-            >
-              <animateMotion
-                dur="1.5s"
-                repeatCount="indefinite"
-                path={safePath}
-              />
-            </motion.circle>
-            
-            {/* Add an additional particle for more visibility */}
-            <motion.circle 
-              r="5"
-              fill={`${serviceColor}80`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: delay + particleAnimationDelay + 0.2, duration: 0.3 }}
-            >
-              <animateMotion
-                dur="1.5s"
-                begin="0.5s" /* Offset timing */
-                repeatCount="indefinite"
-                path={safePath}
-              />
-            </motion.circle>
-          </>
-        )}
-      </svg>
-    </motion.div>
+    <g>
+      <path
+        d={safePath}
+        stroke="#e5e7eb"
+        strokeWidth="6"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        id={pathId}
+        d={safePath}
+        stroke={serviceColor}
+        strokeWidth="3.5"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{
+            opacity: 0,
+            strokeDasharray: 1000,
+            strokeDashoffset: 1000,
+        }}
+      />
+    </g>
   );
 };
 
@@ -506,279 +397,291 @@ const FlowchartPage: React.FC = () => {
   const [selectedServiceIndex, setSelectedServiceIndex] = useState(0);
   const [selectedRoleIndex, setSelectedRoleIndex] = useState<number | null>(null);
   const [elementPositions, setElementPositions] = useState<Record<string, Position>>({});
-  const [animatingSteps, setAnimatingSteps] = useState<number[]>([]);
-  const [visibleSteps, setVisibleSteps] = useState<number[]>([]);
-  const [forceVisibility, setForceVisibility] = useState(false);
-  const [showDebug, setShowDebug] = useState(false); // Add debugging state
+  const [showDebug, setShowDebug] = useState(false);
+  const [isBotResponseVisible, setIsBotResponseVisible] = useState(false);
   const workflowChartContainerRef = useRef<HTMLDivElement>(null);
-
-  // Track animation timeouts so they can be cleared when needed
-  const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
+  const timelineRef = useRef<gsap.core.Timeline | null>(null);
   const calculationRetryRef = useRef<number>(0);
   const maxCalculationRetries = 5;
 
-  // Get current workflow data
   const currentWorkflow = serviceWorkflows[selectedServiceIndex];
 
-  // Clear animation timeouts to prevent memory leaks
-  const clearAnimationTimeouts = () => {
-    timeoutsRef.current.forEach(clearTimeout);
-    timeoutsRef.current = [];
-  };
-
-  // Force immediate display of the flowchart for initial render
   useEffect(() => {
-    // Add keypress handler for debug mode (press 'd')
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'd') {
         setShowDebug(prev => !prev);
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
-    
-    // Calculate positions after a slight delay to ensure DOM is ready
+
     setTimeout(() => {
       calculatePositions();
     }, 300);
-    
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [currentWorkflow]);  // Don't automatically set visibleSteps here
+  }, [currentWorkflow.name]);
 
-  // Replace the useEffect for forceVisibility to fix the dependency order problem
-  useEffect(() => {
-    // If a role is selected but no steps are visible after a delay, force visibility
-    if (selectedRoleIndex !== null && visibleSteps.length === 0) {
-      const forceVisibilityTimeout = setTimeout(() => {
-        console.log("Force visibility check running...");
-        // If still no steps visible, force them all to be visible
-        if (visibleSteps.length === 0) {
-          console.log("Forcing visibility of all workflow steps");
-          setForceVisibility(true);
-          
-          // Determine the sequence based on role index
-          let sequence: number[] = [];
-          if (selectedRoleIndex < 2) {
-            sequence = [0, 1, 2, 5];
-          } else {
-            sequence = [0, 4, 3, 5];
-          }
-          
-          // Activate all steps at once for visibility
-          setAnimatingSteps(sequence);
-          setVisibleSteps(sequence);
-          
-          // Recalculate positions but use a callback to avoid the dependency
-          setTimeout(() => {
-            requestAnimationFrame(() => {
-              if (workflowChartContainerRef.current) {
-                calculatePositions();
-              }
-            });
-          }, 100);
-        }
-      }, 2000); // Reduced from 3000 for faster fallback
-      
-      return () => clearTimeout(forceVisibilityTimeout);
-    } else if (selectedRoleIndex === null) {
-      // Reset when no role is selected
-      setForceVisibility(false);
-    }
-  }, [selectedRoleIndex, visibleSteps.length]); // Removed calculatePositions from dependency array
-
-  // Function to calculate positions of elements for drawing connections
   const calculatePositions = useCallback(() => {
+    console.log("Calculating positions...");
     if (!workflowChartContainerRef.current) {
       console.warn("Workflow chart container ref not available");
       return;
     }
 
-    // Check if elements are ready to be measured
     let calculationPossible = true;
     const positions: Record<string, Position> = {};
     const containerRect = workflowChartContainerRef.current.getBoundingClientRect();
 
-    // Use a more direct approach for getting element positions
     const getElementPosition = (id: string): Position | null => {
       const element = document.getElementById(id);
       if (!element) {
-        console.warn(`Element with id ${id} not found`);
         return null;
       }
-      
       const rect = element.getBoundingClientRect();
       return {
         x: rect.left - containerRect.left,
         y: rect.top - containerRect.top,
         width: rect.width,
-        height: rect.height
+        height: rect.height,
       };
     };
 
-    // Calculate positions for roles
     currentWorkflow.roles.forEach((_, i) => {
       const roleId = `${currentWorkflow.name}-role-${i}`;
       const position = getElementPosition(roleId);
-      if (position) {
-        positions[roleId] = position;
-      } else {
-        calculationPossible = false;
-      }
+      if (position) positions[roleId] = position;
+      else calculationPossible = false;
     });
 
-    // Calculate position for workflow steps
     currentWorkflow.workflowSteps.forEach((_, i) => {
       const stepId = `${currentWorkflow.name}-step-${i}`;
       const position = getElementPosition(stepId);
-      if (position) {
-        positions[stepId] = position;
-      } else {
-        // For steps, we'll log but not fail the calculation
-        console.warn(`Step element ${stepId} not found or not positioned yet`);
-      }
+      if (position) positions[stepId] = position;
     });
 
-    // Calculate position for chat example
     const chatId = `${currentWorkflow.name}-chat`;
     const chatPosition = getElementPosition(chatId);
-    if (chatPosition) {
-      positions[chatId] = chatPosition;
-    } else {
-      calculationPossible = false;
-    }
-    
-    // Update state if we have at least the basic positions
-    if (Object.keys(positions).length > 0) {
-      console.log(`Calculated ${Object.keys(positions).length} element positions`);
-      setElementPositions(positions);
-      calculationRetryRef.current = 0; // Reset retry counter on success
-    } else if (calculationRetryRef.current < maxCalculationRetries) {
-      // Retry calculation with exponential backoff
+    if (chatPosition) positions[chatId] = chatPosition;
+    else calculationPossible = false;
+
+    const requiredPositionsFound = currentWorkflow.roles.every((_, i) => positions[`${currentWorkflow.name}-role-${i}`]) && positions[chatId];
+
+    if (Object.keys(positions).length > 0 && requiredPositionsFound) {
+       console.log(`Calculated ${Object.keys(positions).length} element positions`);
+       setElementPositions(positions);
+       calculationRetryRef.current = 0;
+
+       if (selectedRoleIndex !== null) {
+           console.log("Positions updated while role selected, re-running animation setup.");
+           queueMicrotask(() => {
+               handleRoleClick(selectedRoleIndex, true);
+           });
+       }
+    } else if (calculationRetryRef.current < maxCalculationRetries && !requiredPositionsFound) {
       calculationRetryRef.current += 1;
-      const delay = Math.min(200 * calculationRetryRef.current, 1000); // Max 1 second delay
+      const delay = Math.min(100 * calculationRetryRef.current, 500);
       console.log(`Retrying position calculation (${calculationRetryRef.current}/${maxCalculationRetries}) in ${delay}ms`);
       setTimeout(() => calculatePositions(), delay);
-    } else {
-      console.error("Failed to calculate positions after maximum retries");
-      // Set force visibility as a last resort
-      setForceVisibility(true);
+    } else if (!requiredPositionsFound) {
+      console.error("Failed to calculate required positions (roles, chat) after maximum retries");
     }
-  }, [currentWorkflow]); // Only depend on currentWorkflow
+  }, [currentWorkflow.name, currentWorkflow.roles, currentWorkflow.workflowSteps, selectedRoleIndex]);
 
   const handleServiceSelect = (index: number) => {
-    clearAnimationTimeouts();
+    if (timelineRef.current) {
+      timelineRef.current.kill();
+      timelineRef.current = null;
+    }
+    const previousWorkflowName = serviceWorkflows[selectedServiceIndex].name;
+    gsap.set(
+      `[id^="${previousWorkflowName}-step-"], #${previousWorkflowName}-chat, [id^="path-${previousWorkflowName}-"]`,
+      { opacity: 0, scale: 0.9, clearProps: "all" }
+    );
+    gsap.set(
+        `[id^="path-${previousWorkflowName}-"]`, { strokeDashoffset: '1000', strokeDasharray: '1000 1000', clearProps: "all" }
+    );
+
     if (index === selectedServiceIndex && selectedRoleIndex !== null) {
-      // If clicking the already selected service, reset the role selection
       setSelectedRoleIndex(null);
-      setAnimatingSteps([]);
-      setVisibleSteps([]);
+      setIsBotResponseVisible(false);
     } else if (index !== selectedServiceIndex) {
-      // If changing service, reset role and trigger service change
       setSelectedRoleIndex(null);
-      setAnimatingSteps([]);
-      setVisibleSteps([]);
-      // Delay service index change slightly to allow for animations to clear
-      timeoutsRef.current.push(setTimeout(() => {
-        setSelectedServiceIndex(index);
-        setElementPositions({}); // Clear positions when service changes
-      }, 150)); // Reduced delay
+      setIsBotResponseVisible(false);
+      setSelectedServiceIndex(index);
+      setElementPositions({});
+      setTimeout(() => calculatePositions(), 50);
     }
   };
 
-  const handleRoleClick = (index: number) => {
-    clearAnimationTimeouts();
+  const handleRoleClick = (roleIndex: number, isPositionUpdate = false) => {
+    if (timelineRef.current) {
+      timelineRef.current.kill();
+      timelineRef.current = null;
+    }
 
-    if (index === selectedRoleIndex) {
-      // Deselect role
+    if (!isPositionUpdate) {
+        gsap.set(
+          `[id^="${currentWorkflow.name}-step-"], #${currentWorkflow.name}-chat`,
+          { opacity: 0, scale: 0.9, transformOrigin: "center center" }
+        );
+        gsap.set(
+          `[id^="path-${currentWorkflow.name}-"]`,
+          { opacity: 0, strokeDashoffset: 1000, strokeDasharray: '1000 1000' }
+        );
+    } else {
+         gsap.set(
+          `[id^="path-${currentWorkflow.name}-"]`,
+          { opacity: 0, strokeDashoffset: 1000, strokeDasharray: '1000 1000' }
+        );
+    }
+
+    if (roleIndex === selectedRoleIndex && !isPositionUpdate) {
       setSelectedRoleIndex(null);
-      setAnimatingSteps([]);
-      setVisibleSteps([]);
+      setIsBotResponseVisible(false);
       return;
     }
 
-    // Select new role and reset animations
-    setSelectedRoleIndex(index);
-    setAnimatingSteps([]);
-    setVisibleSteps([]); 
+    if (!isPositionUpdate) {
+        setSelectedRoleIndex(roleIndex);
+        setIsBotResponseVisible(false);
 
-    // Calculate initial positions (roles, chat, any already visible elements)
-    requestAnimationFrame(() => calculatePositions());
+        // Make chat box visible immediately
+        const chatIdElement = document.getElementById(`${currentWorkflow.name}-chat`);
+        if (chatIdElement) {
+            gsap.set(chatIdElement, { opacity: 1, scale: 1, transformOrigin: "center center" });
+        }
+        // Reset other steps for animation
+        gsap.set(
+          `[id^="${currentWorkflow.name}-step-"]`,
+          { opacity: 0, scale: 0.9, transformOrigin: "center center" }
+        );
+    }
 
-    // Define animation timing constants - slowed down for visibility
-    const initialDelay = 700; // Slower start
-    const stepAnimationDelay = 1800; // Much slower time between steps
-    const stepVisibilityDelay = 400; // Slower delay between connection animation start and block visibility
+    const roleId = `${currentWorkflow.name}-role-${roleIndex}`;
+    const chatId = `${currentWorkflow.name}-chat`;
+    const requiredIds = [roleId, chatId, ...currentWorkflow.workflowSteps.map((_, i) => `${currentWorkflow.name}-step-${i}`)];
+    const allPositionsReady = requiredIds.every(id => elementPositions[id]);
 
-    // Define the sequence based on role index
+    if (!allPositionsReady) {
+        console.warn("Positions not ready for all animation elements, attempting recalculation...");
+        calculatePositions();
+        setTimeout(() => {
+            const afterDelayPositionsReady = requiredIds.every(id => elementPositions[id]);
+            if (!afterDelayPositionsReady) {
+                console.error("Still missing element positions after delay. Cannot start animation.");
+                return;
+            } else {
+                 handleRoleClick(roleIndex, false);
+            }
+        }, 200);
+        return;
+    }
+
+    console.log("Starting GSAP animation sequence for role:", roleIndex);
+    const tl = gsap.timeline({
+      onComplete: () => { timelineRef.current = null; console.log("GSAP Timeline Complete"); },
+      onInterrupt: () => { console.log("GSAP Timeline Interrupted"); }
+    });
+    timelineRef.current = tl;
+
     let sequence: number[] = [];
-    if (index < 2) { // Roles 0, 1 use sequence 1
+    if (roleIndex < 2) {
       sequence = [0, 1, 2, 5];
-    } else { // Roles 2, 3 use sequence 2
+    } else {
       sequence = [0, 4, 3, 5];
     }
 
-    let accumulatedDelay = initialDelay;
+    const getStepId = (stepIndex: number) => `${currentWorkflow.name}-step-${stepIndex}`;
 
-    // First animate the connection from role to first step
-    timeoutsRef.current.push(setTimeout(() => {
-      setAnimatingSteps([sequence[0]]); // Start with the first step active
-      console.log(`[Animation] Activating first connection to step ${sequence[0]}`);
-    }, accumulatedDelay));
+    // Adjusted durations and easing for slower, smoother animations
+    const pathDuration = 1.8; // Increased path animation duration
+    const blockDuration = 1.2; // Increased block pop-up duration
+    const blockEase = "power2.out"; // Smoother ease for blocks
 
-    // Then make the first step visible and recalculate positions
-    timeoutsRef.current.push(setTimeout(() => {
-      setVisibleSteps([sequence[0]]); // Start with only the first step visible
-      console.log(`[Animation] Making step ${sequence[0]} visible`);
-      // Recalculate after the step should be rendered
-      requestAnimationFrame(() => calculatePositions()); 
-    }, accumulatedDelay + stepVisibilityDelay));
+    const animatePath = (pathElementId: string, duration = pathDuration, delay = 0) => {
+        const pathElement = document.getElementById(pathElementId);
+        if (!pathElement || !(pathElement instanceof SVGPathElement)) {
+            console.error(`Path element not found or not an SVGPathElement: ${pathElementId}`);
+            tl.to({}, {duration: 0.01}); // Add a small delay to keep timeline consistent
+            return;
+        }
+        const path = pathElement;
+        const length = path.getTotalLength();
+        if (!length || length <= 0 || !isFinite(length)) {
+            console.warn(`Path ${pathElementId} has invalid length: ${length}. Skipping animation.`);
+            path.style.opacity = '0';
+            tl.to({}, {duration: 0.01}); // Add a small delay
+            return;
+        }
+        gsap.set(path, {
+            strokeDasharray: length + " " + length,
+            strokeDashoffset: length,
+            opacity: 1
+        });
 
-    // Animate remaining steps in sequence
+        tl.to(path, {
+            strokeDashoffset: 0,
+            duration: duration,
+            ease: "none", // Linear ease works well for path drawing
+            delay: delay
+        }, ">"); // Execute after previous animation completes
+    };
+
+    const popUpBlock = (elementId: string, duration = blockDuration, delay = 0) => {
+       const block = document.getElementById(elementId);
+       if (!block) {
+           console.error(`Block element not found: ${elementId}`);
+           tl.to({}, {duration: 0.01}); // Add a small delay
+           return;
+       }
+       gsap.set(block, { transformOrigin: "center center" });
+       tl.to(block, {
+           opacity: 1,
+           scale: 1,
+           duration: duration,
+           ease: blockEase, // Use the smoother ease
+           delay: delay
+       }, "<"); // Execute concurrently with the start of the previous animation (path drawing)
+    };
+
+    const firstStepIndex = sequence[0];
+    const firstStepId = getStepId(firstStepIndex);
+    const pathRoleToStep0Id = `path-${roleId}-${firstStepId}`;
+    animatePath(pathRoleToStep0Id);
+    popUpBlock(firstStepId);
+
     for (let i = 0; i < sequence.length - 1; i++) {
-      const currentStepIndex = sequence[i];
-      const nextStepIndex = sequence[i + 1];
-      
-      accumulatedDelay += stepAnimationDelay;
-      
-      // Animate connection to next step
-      timeoutsRef.current.push(setTimeout(() => {
-        // Only keep the current connection animating for clarity
-        setAnimatingSteps([nextStepIndex]); 
-        console.log(`[Animation] Activating connection from step ${currentStepIndex} to ${nextStepIndex}`);
-      }, accumulatedDelay));
-      
-      // Make next step visible and recalculate positions
-      timeoutsRef.current.push(setTimeout(() => {
-        setVisibleSteps(prev => [...prev, nextStepIndex]); // Add the next step to the visible ones
-        console.log(`[Animation] Making step ${nextStepIndex} visible`);
-        // Recalculate after the step should be rendered
-        requestAnimationFrame(() => calculatePositions()); 
-      }, accumulatedDelay + stepVisibilityDelay));
+        const currentStepIdx = sequence[i];
+        const nextStepIdx = sequence[i + 1];
+        const currentStepId = getStepId(currentStepIdx);
+        const nextStepId = getStepId(nextStepIdx);
+        const pathStepToStepId = `path-${currentStepId}-${nextStepId}`;
+
+        // Add slight delay between steps if needed, e.g., delay: 0.2
+        animatePath(pathStepToStepId);
+        popUpBlock(nextStepId);
     }
 
-    // Finally, activate connection to chat
-    accumulatedDelay += stepAnimationDelay;
-    timeoutsRef.current.push(setTimeout(() => {
-      const lastStepIndex = sequence[sequence.length - 1];
-      // Ensure the final connection is marked as animating
-      setAnimatingSteps([lastStepIndex]);
-      console.log(`[Animation] Finalizing animation sequence, connecting to chat.`);
-    }, accumulatedDelay));
+    const lastStepIndex = sequence[sequence.length - 1];
+    const lastStepId = getStepId(lastStepIndex);
+    const pathLastStepToChatId = `path-${lastStepId}-${chatId}`;
+    animatePath(pathLastStepToChatId);
+
+    // Adjust the delay for the bot response visibility if needed due to longer animation
+    tl.call(() => setIsBotResponseVisible(true), [], ">-=0.5"); // Show response slightly before the last path finishes
+
   };
 
-  // Add missing useEffect for automatic recalculation of positions on resize
   useEffect(() => {
-    // Recalculate on window resize
     window.addEventListener('resize', calculatePositions);
     
-    // Cleanup
     return () => {
       window.removeEventListener('resize', calculatePositions);
-      clearAnimationTimeouts(); // Ensure timeouts are cleared on unmount
     };
-  }, [calculatePositions]); // Depend only on calculatePositions
+  }, [calculatePositions]);
 
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [smoothMousePosition, setSmoothMousePosition] = useState({ x: 0, y: 0 });
@@ -815,7 +718,7 @@ const FlowchartPage: React.FC = () => {
       }
        console.log("FlowchartPage: Mouse move effect cleanup.");
     };
-  }, []); // Removed dependencies as they cause re-renders
+  }, []);
 
 
   const backgroundStyle = {
@@ -823,7 +726,7 @@ const FlowchartPage: React.FC = () => {
     '--mouse-y': `${smoothMousePosition.y}px`,
   } as React.CSSProperties;
 
-  console.log("Rendering FlowchartPage. Selected Role:", selectedRoleIndex, "Visible Steps:", visibleSteps.length, "Positions:", Object.keys(elementPositions).length);
+  console.log("Rendering FlowchartPage. Selected Role:", selectedRoleIndex, "Positions:", Object.keys(elementPositions).length);
 
   return (
     <div
@@ -832,12 +735,9 @@ const FlowchartPage: React.FC = () => {
     >
        <Navbar />
 
-       <motion.div
+       <div
          className="w-full py-10 px-4 text-center relative z-10 mt-24 mb-10"
          style={{ perspective: '1000px' }}
-         initial={{ opacity: 0 }}
-         animate={{ opacity: 1 }}
-         transition={{ duration: 0.4 }}
        >
          <h3 className="text-xpectrum-purple font-medium tracking-wide uppercase mb-3 text-lg">HOW XPECTRUM WORKS</h3>
          <h2 className="text-4xl md:text-5xl font-bold text-gray-800 mb-8">
@@ -846,27 +746,25 @@ const FlowchartPage: React.FC = () => {
 
          <div className="flex flex-wrap justify-center gap-4 mb-10">
            {serviceWorkflows.map((service, index) => (
-             <motion.button
+             <button
                key={service.name}
                onClick={() => handleServiceSelect(index)}
                className={`flex items-center px-5 py-3 rounded-lg transition-all duration-300 ${
                  selectedServiceIndex === index
                    ? 'bg-xpectrum-purple text-white shadow-md scale-105'
-                   : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm border border-gray-100'
+                   : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm border border-gray-100 hover:-translate-y-1'
                }`}
-               whileHover={{ y: -2 }}
-               whileTap={{ scale: 0.98 }}
              >
                <service.icon className="w-5 h-5 mr-2" />
                <span className="font-medium text-base">{service.name}</span>
-             </motion.button>
+             </button>
            ))}
          </div>
          
          <div
            ref={workflowChartContainerRef}
            className="max-w-5xl mx-auto relative bg-white/30 backdrop-blur-sm"
-           key={`workflow-container-${selectedServiceIndex}`} // Better key for re-rendering
+           key={`workflow-container-${selectedServiceIndex}`}
            style={{
              backgroundImage: "linear-gradient(rgba(229, 231, 235, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(229, 231, 235, 0.3) 1px, transparent 1px)",
              backgroundSize: "20px 20px",
@@ -877,28 +775,32 @@ const FlowchartPage: React.FC = () => {
              border: "1px solid rgba(229, 231, 235, 0.5)"
            }}>
              
-             {/* Debug panel - only visible when debug mode is enabled */}
              {showDebug && (
                <div className="absolute top-0 right-0 bg-white/90 p-3 text-xs text-left border border-gray-200 rounded-bl-lg z-50 shadow-sm max-w-[300px] max-h-[300px] overflow-auto">
                  <h5 className="font-bold">Debug Info:</h5>
-                 <div>Selected Service: {selectedServiceIndex}</div>
+                 <div>Selected Service: {selectedServiceIndex} ({currentWorkflow.name})</div>
                  <div>Selected Role: {selectedRoleIndex !== null ? selectedRoleIndex : 'none'}</div>
-                 <div>Visible Steps: {visibleSteps.join(', ')}</div>
-                 <div>Animating Steps: {animatingSteps.join(', ')}</div>
-                 <div>Force Visibility: {forceVisibility ? 'true' : 'false'}</div>
                  <div>Elements with positions: {Object.keys(elementPositions).length}</div>
                  <details>
-                   <summary>Position Keys</summary>
+                   <summary>Position Keys ({Object.keys(elementPositions).length})</summary>
                    <ul className="pl-3">
                      {Object.keys(elementPositions).map((key) => (
                        <li key={key} className="text-[10px]">{key}</li>
                      ))}
                    </ul>
                  </details>
+                 <details>
+                   <summary>Workflow Steps ({currentWorkflow.workflowSteps.length})</summary>
+                   <ul className="pl-3">
+                     {currentWorkflow.workflowSteps.map((step, idx) => (
+                       <li key={idx} className="text-[10px]">{idx}: {step.title} (ID: {`${currentWorkflow.name}-step-${idx}`})</li>
+                     ))}
+                   </ul>
+                 </details>
+                 <div>Timeline Active: {timelineRef.current ? 'Yes' : 'No'}</div>
                </div>
              )}
              
-             {/* Fallback content - shown if positions haven't been calculated yet */}
              {Object.keys(elementPositions).length === 0 && (
                <div className="flex flex-col items-center justify-center h-[480px] text-gray-600">
                  <div className="mb-4">
@@ -917,238 +819,152 @@ const FlowchartPage: React.FC = () => {
                </div>
              )}
              
-             {/* Main layout container */}
-             <div className={`relative flex justify-between items-center px-8 h-[480px] z-20 transition-opacity duration-300`}>
-                {/* Left side - roles */}
+             <div className={`relative flex justify-between items-center px-8 h-[480px] z-20 transition-opacity duration-300 ${Object.keys(elementPositions).length > 0 ? 'opacity-100' : 'opacity-0'}`}>
                 <div className="flex flex-col space-y-3">
                    <div className="mb-2 text-gray-700 font-medium text-sm">Select a Role:</div>
                    {currentWorkflow.roles.map((role, i) => (
-                      <motion.div
-                         key={`${currentWorkflow.name}-role-${i}-wrapper`}
-                         initial={{ opacity: 0, x: -20 }}
-                         animate={{ opacity: 1, x: 0 }}
-                         transition={{ duration: 0.3, delay: 0.1 + i * 0.05 }}
-                      >
+                      <div key={`${currentWorkflow.name}-role-${i}-wrapper`}>
                           <WorkflowBlock
                              id={`${currentWorkflow.name}-role-${i}`}
                              title={role.title}
                              IconComponent={<role.icon size={20}/>}
-                             delay={0}
                              onClick={() => handleRoleClick(i)}
                              isSelected={selectedRoleIndex === i}
                              color={selectedRoleIndex === i ? 'primary' : 'dark'}
-                             className="hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                             className="hover:shadow-xl transition-all duration-300 hover:-translate-y-1 !opacity-100 !scale-100"
                              is3D={true}
+                             variant={undefined}
                           />
-                      </motion.div>
+                      </div>
                    ))}
                 </div>
 
-               {/* Center - workflow steps - always show all steps initially */}
-                <div className="border border-gray-200 rounded-xl bg-white/70 shadow-sm w-[400px] h-[360px] grid grid-cols-3 grid-rows-2 gap-4 justify-items-center items-center px-4 py-4 relative mx-6 z-30">
-                  <AnimatePresence>
-                    {currentWorkflow.workflowSteps.map((step, index) => (
-                      (visibleSteps.includes(index) || (forceVisibility && selectedRoleIndex !== null)) && (
-                        <motion.div
-                          key={`${currentWorkflow.name}-step-${index}-wrapper`}
-                          className="flex justify-center items-center"
-                          style={{
-                            gridRow: step.position.row, 
-                            gridColumn: step.position.col,
-                            width: '100%', // Ensure div takes grid cell space
-                            height: '100%' // Ensure div takes grid cell space
-                          }}
-                          initial={{ opacity: 0, scale: 0.8, y: 10 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.8, y: -10 }}
-                          transition={{ duration: 0.4, type: "spring", stiffness: 200, damping: 15 }}
-                        >
-                          <WorkflowBlock
-                            id={`${currentWorkflow.name}-step-${index}`}
-                            title={step.title}
-                            delay={0}
-                            color={(animatingSteps.includes(index)) ? 'primary' : 'dark'}
-                            IconComponent={step.icon && <step.icon size={20} className={(animatingSteps.includes(index)) ? "text-gray-700" : "text-gray-900"} />}
-                            variant={step.variant}
-                            isAnimating={animatingSteps.includes(index)}
-                            className="transition-all duration-300"
-                            is3D={true}
-                          />
-                        </motion.div>
-                      )
-                    ))}
-                  </AnimatePresence>
-                </div>
+               <div className="border border-gray-200 rounded-xl bg-white/70 shadow-sm w-[400px] h-[360px] grid grid-cols-3 grid-rows-2 gap-4 justify-items-center items-center px-4 py-4 relative mx-6 z-30">
+                 {currentWorkflow.workflowSteps.map((step, index) => (
+                   <div
+                     key={`${currentWorkflow.name}-step-${index}-wrapper`}
+                     className="flex justify-center items-center"
+                     style={{
+                       gridRow: step.position.row,
+                       gridColumn: step.position.col,
+                       width: '100%', height: '100%'
+                     }}
+                   >
+                     <WorkflowBlock
+                       id={`${currentWorkflow.name}-step-${index}`}
+                       title={step.title}
+                       color={'dark'}
+                       IconComponent={step.icon && <step.icon size={20} className={"text-gray-900"} />}
+                       variant={step.variant}
+                       className="transition-colors duration-300"
+                       is3D={true}
+                     />
+                   </div>
+                 ))}
+               </div>
 
-               {/* Right side - chat example */}
-                <div className="flex flex-col items-end relative z-30">
-                   <motion.div
-                      key={`${currentWorkflow.name}-chat-wrapper`}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.3, delay: 0.4 }}
-                     >
-                      <ChatExample
-                        id={`${currentWorkflow.name}-chat`}
-                        delay={0}
-                        userMessage={currentWorkflow.chatExample.user}
-                        botMessage={currentWorkflow.chatExample.bot}
-                        serviceColor={currentWorkflow.color || 'bg-xpectrum-purple'}
-                      />
-                  </motion.div>
-                </div>
+               <div className="flex flex-col items-end relative z-30">
+                  <div key={`${currentWorkflow.name}-chat-wrapper`}>
+                     <ChatExample
+                       id={`${currentWorkflow.name}-chat`}
+                       userMessage={currentWorkflow.chatExample.user}
+                       botMessage={currentWorkflow.chatExample.bot}
+                       serviceColor={currentWorkflow.color || 'bg-xpectrum-purple'}
+                       showBotResponse={isBotResponseVisible}
+                     />
+                 </div>
+               </div>
              </div>
 
-             {/* SVG Connections Layer - Always render connections, but make them visible/invisible based on state */}
-              <div className="absolute inset-0 z-10 pointer-events-none">
-                {/* Connection from selected role to first step - check positions exist */}
-                {Object.keys(elementPositions).length > 0 && currentWorkflow.roles.map((_, roleIndex) => {
-                  const roleId = `${currentWorkflow.name}-role-${roleIndex}`;
-                  const firstStepId = `${currentWorkflow.name}-step-0`;
-                  if (elementPositions[roleId] && elementPositions[firstStepId]) {
-                    return (
-                      <g key={`conn-role-${roleIndex}-fragment`}> 
-                        <Connection
-                          key={`conn-role-${roleIndex}-step-0`}
-                          from={`role-${roleIndex}`} to="step-0"
-                          delay={0.1}
-                          path={calculateSmoothCurvePath(
-                            elementPositions[roleId],
-                            elementPositions[firstStepId]
-                          )}
-                          // Active if this role is selected and step 0 is the target
-                          isActive={selectedRoleIndex === roleIndex && animatingSteps.length > 0 && animatingSteps[0] === 0}
-                          serviceColor={currentWorkflow.color}
-                        />
-                      </g>
-                    );
-                  }
-                  return null; // Don't render if positions aren't ready
+             <div className="absolute inset-0 z-10 pointer-events-none overflow-visible">
+                {currentWorkflow.roles.map((_, roleIndex) => {
+                    const roleId = `${currentWorkflow.name}-role-${roleIndex}`;
+                    const firstStepId = `${currentWorkflow.name}-step-0`;
+                    const pathId = `path-${roleId}-${firstStepId}`;
+                    if (elementPositions[roleId] && elementPositions[firstStepId]) {
+                        return (
+                            <Connection
+                                key={pathId}
+                                from={roleId} to={firstStepId}
+                                path={calculateSmoothCurvePath(
+                                    elementPositions[roleId],
+                                    elementPositions[firstStepId]
+                                )}
+                                serviceColor={currentWorkflow.color}
+                            />
+                        );
+                    }
+                    return null;
                 })}
-                
-                {/* Connections between steps - check positions exist */}
-                  {Object.keys(elementPositions).length > 0 && (
-                    <>
-                      {/* Path 0→1→2→5 */}
-                      {(elementPositions[`${currentWorkflow.name}-step-0`] && elementPositions[`${currentWorkflow.name}-step-1`]) && (
-                        <Connection
-                          key="conn-step-0-1"
-                          from="step-0" to="step-1"
-                          delay={0.1}
-                          path={calculateSmoothCurvePath(
-                            elementPositions[`${currentWorkflow.name}-step-0`],
-                            elementPositions[`${currentWorkflow.name}-step-1`]
-                          )}
-                          // Active if role uses this path and step 1 is the target
-                          isActive={selectedRoleIndex !== null && selectedRoleIndex < 2 && animatingSteps.length > 0 && animatingSteps[0] === 1}
-                          serviceColor={currentWorkflow.color}
-                        />
-                      )}
-                      
-                      {(elementPositions[`${currentWorkflow.name}-step-1`] && elementPositions[`${currentWorkflow.name}-step-2`]) && (
-                        <Connection
-                          key="conn-step-1-2"
-                          from="step-1" to="step-2"
-                          delay={0.1}
-                          path={calculateSmoothCurvePath(
-                            elementPositions[`${currentWorkflow.name}-step-1`],
-                            elementPositions[`${currentWorkflow.name}-step-2`]
-                          )}
-                          // Active if role uses this path and step 2 is the target
-                          isActive={selectedRoleIndex !== null && selectedRoleIndex < 2 && animatingSteps.length > 0 && animatingSteps[0] === 2}
-                          serviceColor={currentWorkflow.color}
-                        />
-                      )}
-                      
-                      {(elementPositions[`${currentWorkflow.name}-step-2`] && elementPositions[`${currentWorkflow.name}-step-5`]) && (
-                        <Connection
-                          key="conn-step-2-5"
-                          from="step-2" to="step-5"
-                          delay={0.1}
-                          path={calculateSmoothCurvePath(
-                            elementPositions[`${currentWorkflow.name}-step-2`],
-                            elementPositions[`${currentWorkflow.name}-step-5`]
-                          )}
-                          // Active if role uses this path and step 5 is the target
-                          isActive={selectedRoleIndex !== null && selectedRoleIndex < 2 && animatingSteps.length > 0 && animatingSteps[0] === 5}
-                          serviceColor={currentWorkflow.color}
-                        />
-                      )}
-                      
-                      {/* Path 0→4→3→5 */}
-                      {(elementPositions[`${currentWorkflow.name}-step-0`] && elementPositions[`${currentWorkflow.name}-step-4`]) && (
-                        <Connection
-                          key="conn-step-0-4"
-                          from="step-0" to="step-4"
-                          delay={0.1}
-                          path={calculateSmoothCurvePath(
-                            elementPositions[`${currentWorkflow.name}-step-0`],
-                            elementPositions[`${currentWorkflow.name}-step-4`]
-                          )}
-                          // Active if role uses this path and step 4 is the target
-                          isActive={selectedRoleIndex !== null && selectedRoleIndex >= 2 && animatingSteps.length > 0 && animatingSteps[0] === 4}
-                          serviceColor={currentWorkflow.color}
-                        />
-                      )}
-                      
-                      {(elementPositions[`${currentWorkflow.name}-step-4`] && elementPositions[`${currentWorkflow.name}-step-3`]) && (
-                        <Connection
-                          key="conn-step-4-3"
-                          from="step-4" to="step-3"
-                          delay={0.1}
-                          path={calculateSmoothCurvePath(
-                            elementPositions[`${currentWorkflow.name}-step-4`],
-                            elementPositions[`${currentWorkflow.name}-step-3`]
-                          )}
-                          // Active if role uses this path and step 3 is the target
-                          isActive={selectedRoleIndex !== null && selectedRoleIndex >= 2 && animatingSteps.length > 0 && animatingSteps[0] === 3}
-                          serviceColor={currentWorkflow.color}
-                        />
-                      )}
-                      
-                      {(elementPositions[`${currentWorkflow.name}-step-3`] && elementPositions[`${currentWorkflow.name}-step-5`]) && (
-                        <Connection
-                          key="conn-step-3-5"
-                          from="step-3" to="step-5"
-                          delay={0.1}
-                          path={calculateSmoothCurvePath(
-                            elementPositions[`${currentWorkflow.name}-step-3`],
-                            elementPositions[`${currentWorkflow.name}-step-5`]
-                          )}
-                          // Active if role uses this path and step 5 is the target
-                          isActive={selectedRoleIndex !== null && selectedRoleIndex >= 2 && animatingSteps.length > 0 && animatingSteps[0] === 5}
-                          serviceColor={currentWorkflow.color}
-                        />
-                      )}
-                      
-                      {/* Connection from step 5 to chat - check positions exist */}
-                      {(elementPositions[`${currentWorkflow.name}-step-5`] && elementPositions[`${currentWorkflow.name}-chat`]) && (
-                        <Connection
-                          key="conn-step-5-chat"
-                          from="step-5" to="chat"
-                          delay={0.1}
-                          path={calculateSmoothCurvePath(
-                            elementPositions[`${currentWorkflow.name}-step-5`],
-                            elementPositions[`${currentWorkflow.name}-chat`]
-                          )}
-                          // Active if role is selected and step 5 is the target
-                          isActive={selectedRoleIndex !== null && animatingSteps.length > 0 && animatingSteps[0] === 5}
-                          serviceColor={currentWorkflow.color}
-                        />
-                      )}
-                    </>
-                  )}
-              </div>
+
+                {[ [0, 1], [1, 2], [2, 5] ].map(([fromIdx, toIdx]) => {
+                    const fromStepId = `${currentWorkflow.name}-step-${fromIdx}`;
+                    const toStepId = `${currentWorkflow.name}-step-${toIdx}`;
+                    const pathId = `path-${fromStepId}-${toStepId}`;
+                    if (elementPositions[fromStepId] && elementPositions[toStepId]) {
+                        return (
+                           <Connection
+                              key={pathId}
+                              from={fromStepId} to={toStepId}
+                              path={calculateSmoothCurvePath(
+                                  elementPositions[fromStepId],
+                                  elementPositions[toStepId]
+                              )}
+                              serviceColor={currentWorkflow.color}
+                            />
+                        );
+                    }
+                    return null;
+                })}
+
+                {[ [0, 4], [4, 3], [3, 5] ].map(([fromIdx, toIdx]) => {
+                    const fromStepId = `${currentWorkflow.name}-step-${fromIdx}`;
+                    const toStepId = `${currentWorkflow.name}-step-${toIdx}`;
+                    const pathId = `path-${fromStepId}-${toStepId}`;
+                    if (elementPositions[fromStepId] && elementPositions[toStepId]) {
+                        return (
+                            <Connection
+                                key={pathId}
+                                from={fromStepId} to={toStepId}
+                                path={calculateSmoothCurvePath(
+                                    elementPositions[fromStepId],
+                                    elementPositions[toStepId]
+                                )}
+                                serviceColor={currentWorkflow.color}
+                             />
+                         );
+                    }
+                    return null;
+                })}
+
+                {(() => {
+                    const fromStepId = `${currentWorkflow.name}-step-5`;
+                    const toId = `${currentWorkflow.name}-chat`;
+                    const pathId = `path-${fromStepId}-${toId}`;
+                     if (elementPositions[fromStepId] && elementPositions[toId]) {
+                        return (
+                            <Connection
+                                key={pathId}
+                                from={fromStepId} to={toId}
+                                path={calculateSmoothCurvePath(
+                                    elementPositions[fromStepId],
+                                    elementPositions[toId]
+                                )}
+                                serviceColor={currentWorkflow.color}
+                            />
+                        );
+                    }
+                    return null;
+                })()}
+             </div>
          </div>
 
-         <motion.button
-           className="mt-10 bg-xpectrum-purple hover:bg-xpectrum-darkpurple text-white px-7 py-3.5 rounded-full font-medium text-lg transition duration-300 shadow-sm hover:shadow-md"
-           whileHover={{ scale: 1.03 }}
-           whileTap={{ scale: 0.97 }}
+         <button
+           className="mt-10 bg-xpectrum-purple hover:bg-xpectrum-darkpurple text-white px-7 py-3.5 rounded-full font-medium text-lg transition duration-300 shadow-sm hover:shadow-md hover:scale-103 active:scale-97"
          >
            Hire Xpectrum today
-         </motion.button>
-       </motion.div>
+         </button>
+       </div>
 
        <style>{`
         @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
